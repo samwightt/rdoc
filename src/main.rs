@@ -4,6 +4,7 @@ use color_eyre::Result;
 mod commands;
 mod search_index;
 mod search_items;
+mod vlq;
 
 /// A CLI tool for searching generated Rust documentation
 #[derive(Parser)]

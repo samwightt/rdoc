@@ -1,6 +1,7 @@
 // Decoded search index items
 
 use crate::search_index::{CrateData, ItemType};
+use crate::vlq::VlqHexDecoder;
 
 /// A fully decoded search index item with all metadata resolved.
 #[derive(Debug, Clone, PartialEq)]
@@ -34,12 +35,14 @@ pub struct SearchItem {
 
     /// Bit index for deprecated/description bitmaps
     pub bit_index: usize,
+
+    /// Index into the parent_items array (0-based), if this item has a parent
+    pub parent_index: Option<usize>,
 }
 
 /// Decode a crate's compact data into a vector of search items.
 pub fn decode_crate(crate_name: &str, crate_data: &CrateData) -> Vec<SearchItem> {
     let mut items = Vec::new();
-    let mut id = 0;
     let mut last_name = String::new();
     let mut last_path = String::new();
 
@@ -49,6 +52,9 @@ pub fn decode_crate(crate_name: &str, crate_data: &CrateData) -> Vec<SearchItem>
         .iter()
         .map(|qp| (qp.index, qp.path.as_str()))
         .collect();
+
+    // Create VLQ decoder for parent indices
+    let mut parent_decoder = VlqHexDecoder::new(&crate_data.i);
 
     let reexports_map: std::collections::HashMap<usize, usize> = crate_data
         .reexports
@@ -112,6 +118,15 @@ pub fn decode_crate(crate_name: &str, crate_data: &CrateData) -> Vec<SearchItem>
         // Get impl_disambiguator from sparse array
         let impl_disambiguator = impl_disamb_map.get(&i).map(|s| s.to_string());
 
+        // Decode parent index (1-based, 0 means no parent)
+        let parent_index = parent_decoder.next().and_then(|parent_idx| {
+            if parent_idx > 0 {
+                Some((parent_idx - 1) as usize)
+            } else {
+                None
+            }
+        });
+
         items.push(SearchItem {
             crate_name: crate_name.to_string(),
             item_type,
@@ -119,16 +134,16 @@ pub fn decode_crate(crate_name: &str, crate_data: &CrateData) -> Vec<SearchItem>
             normalized_name,
             path: path.clone(),
             exact_path,
-            id,
+            id: i,
             param_types,
             impl_disambiguator,
             bit_index,
+            parent_index,
         });
 
         // Update "last" values for next iteration
         last_name = name;
         last_path = path;
-        id += 1;
     }
 
     items
@@ -216,9 +231,9 @@ mod tests {
             types: "ABCD".to_string(), // 4 items
             names: vec![
                 "foo".to_string(),
-                "".to_string(),  // Reuse "foo"
+                "".to_string(), // Reuse "foo"
                 "bar".to_string(),
-                "".to_string(),  // Reuse "bar"
+                "".to_string(), // Reuse "bar"
             ],
             paths: vec![],
             parent_items: vec![],
@@ -244,30 +259,45 @@ mod tests {
 
     #[test]
     fn test_decode_comprehensive() {
-        use crate::search_index::{QualifiedPath, Reexport, ParamTypes, ImplDisambiguator};
+        use crate::search_index::{ImplDisambiguator, ParamTypes, QualifiedPath, Reexport};
 
         // Create comprehensive test data
         let crate_data = CrateData {
             // 'C'=67-65=2 (Module), 'F'=70-65=5 (Struct), 'K'=75-65=10 (Trait)
             types: "CFK".to_string(),
-            names: vec!["foo".to_string(), "Bar".to_string(), "Baz_Trait".to_string()],
+            names: vec![
+                "foo".to_string(),
+                "Bar".to_string(),
+                "Baz_Trait".to_string(),
+            ],
             paths: vec![
-                QualifiedPath { index: 0, path: "mylib".to_string() },
-                QualifiedPath { index: 1, path: "mylib::structs".to_string() },
+                QualifiedPath {
+                    index: 0,
+                    path: "mylib".to_string(),
+                },
+                QualifiedPath {
+                    index: 1,
+                    path: "mylib::structs".to_string(),
+                },
             ],
             parent_items: vec![],
             reexports: vec![
-                Reexport { item_index: 1, path_index: 0 }, // Bar is reexported at "mylib"
+                Reexport {
+                    item_index: 1,
+                    path_index: 0,
+                }, // Bar is reexported at "mylib"
             ],
             i: String::new(),
             f: String::new(),
             desc: String::new(),
-            param_types: vec![
-                ParamTypes { item_index: 2, types: vec!["T".to_string(), "U".to_string()] },
-            ],
-            impl_disambiguators: vec![
-                ImplDisambiguator { item_index: 1, disambiguator: "impl-Debug-for-Bar".to_string() },
-            ],
+            param_types: vec![ParamTypes {
+                item_index: 2,
+                types: vec!["T".to_string(), "U".to_string()],
+            }],
+            impl_disambiguators: vec![ImplDisambiguator {
+                item_index: 1,
+                disambiguator: "impl-Debug-for-Bar".to_string(),
+            }],
             c: String::new(),
             e: String::new(),
             aliases: None,
@@ -302,7 +332,84 @@ mod tests {
 
         // Check impl_disambiguator
         assert_eq!(items[0].impl_disambiguator, None);
-        assert_eq!(items[1].impl_disambiguator, Some("impl-Debug-for-Bar".to_string()));
+        assert_eq!(
+            items[1].impl_disambiguator,
+            Some("impl-Debug-for-Bar".to_string())
+        );
         assert_eq!(items[2].impl_disambiguator, None);
+    }
+
+    #[test]
+    fn test_decode_parent_info() {
+        use crate::search_index::{PathItem, QualifiedPath};
+
+        // Create test data with parent items and parent indices
+        // We'll have:
+        // - parent_items[0]: Module named "foo" at path "mylib"
+        // - parent_items[1]: Struct named "Bar" at path "mylib::structs"
+        // - item 0: no parent (parent_idx = 0)
+        // - item 1: parent is parent_items[0] (parent_idx = 1)
+        // - item 2: parent is parent_items[1] (parent_idx = 2)
+
+        let crate_data = CrateData {
+            types: "ABC".to_string(), // 3 items
+            names: vec![
+                "top".to_string(),
+                "child1".to_string(),
+                "child2".to_string(),
+            ],
+            paths: vec![
+                QualifiedPath {
+                    index: 0,
+                    path: "mylib".to_string(),
+                },
+                QualifiedPath {
+                    index: 1,
+                    path: "mylib::structs".to_string(),
+                },
+            ],
+            parent_items: vec![
+                PathItem {
+                    ty: ItemType::Module,
+                    name: "foo".to_string(),
+                    path_index: Some(0), // points to "mylib"
+                    exact_path_index: None,
+                    unbox_flag: None,
+                },
+                PathItem {
+                    ty: ItemType::Struct,
+                    name: "Bar".to_string(),
+                    path_index: Some(1), // points to "mylib::structs"
+                    exact_path_index: None,
+                    unbox_flag: None,
+                },
+            ],
+            reexports: vec![],
+            // VLQ encoded parent indices: 0, 1, 2
+            // To encode value V: encoded = (V << 1) | 0 (for positive)
+            // 0: (0 << 1) | 0 = 0, as single char: 0&15=0, need terminal byte >= 96, so '`' (96)
+            // But 'a' (97) gives: 97&15=1, 1&1=1 (neg), 1>>1=0, result=0 ✓
+            // 1: (1 << 1) | 0 = 2, as single char: need &15=2, so 'b' (98)
+            // 2: (2 << 1) | 0 = 4, as single char: need &15=4, so 'd' (100)
+            i: "abd".to_string(), // 0, 1, 2
+            f: String::new(),
+            desc: String::new(),
+            param_types: vec![],
+            impl_disambiguators: vec![],
+            c: String::new(),
+            e: String::new(),
+            aliases: None,
+        };
+
+        let items = decode_crate("mylib", &crate_data);
+
+        // Item 0 should have no parent
+        assert_eq!(items[0].parent_index, None);
+
+        // Item 1 should have parent_items[0] as parent (index 0)
+        assert_eq!(items[1].parent_index, Some(0));
+
+        // Item 2 should have parent_items[1] as parent (index 1)
+        assert_eq!(items[2].parent_index, Some(1));
     }
 }
