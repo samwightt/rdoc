@@ -1,6 +1,6 @@
 # rdoc
 
-A Rust library and CLI tool for parsing and searching rustdoc's generated search index.
+A Rust CLI tool for searching rustdoc generated documentation via the command line. Lets you search for symbols, `cat` documentation for them, and other things.
 
 ## Overview
 
