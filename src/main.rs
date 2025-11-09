@@ -38,7 +38,7 @@ fn main() -> Result<()> {
         }
         None => {
             // When no subcommand is provided, show help
-            Cli::parse_from(&["rdoc", "--help"]);
+            Cli::parse_from(["rdoc", "--help"]);
         }
     }
 
