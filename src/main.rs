@@ -25,6 +25,13 @@ enum Commands {
         #[arg(value_name = "SYMBOL")]
         symbol: String,
     },
+    /// Show documentation for a fully qualified path
+    #[command(about = "Show documentation for a fully qualified item path")]
+    Show {
+        /// The fully qualified path (e.g., "std::fs::read_to_string")
+        #[arg(value_name = "PATH")]
+        path: String,
+    },
 }
 
 fn main() -> Result<()> {
@@ -35,6 +42,9 @@ fn main() -> Result<()> {
     match cli.command {
         Some(Commands::Scan { symbol }) => {
             commands::scan::execute(&symbol)?;
+        }
+        Some(Commands::Show { path }) => {
+            commands::show::execute(&path)?;
         }
         None => {
             // When no subcommand is provided, show help
