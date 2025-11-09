@@ -3,6 +3,9 @@ use colored::Colorize;
 use std::path::Path;
 use std::process::Command;
 
+use crate::search_index::{extract_json_string, parse_search_index};
+use crate::search_items::decode_crate;
+
 /// Scan rustdocs for a specific symbol
 pub fn execute(symbol: &str) -> Result<()> {
     println!(
@@ -43,11 +46,52 @@ pub fn execute(symbol: &str) -> Result<()> {
         println!("{} Documentation generated successfully!", "✓".green().bold());
     }
 
-    // TODO: Implement search using our own parser
-    println!(
-        "{} Search not yet implemented - working on parser",
-        "ℹ".yellow().bold()
-    );
+    // Parse the search index
+    let content = std::fs::read_to_string(search_index_path)
+        .wrap_err("Failed to read search-index.js")?;
+
+    let json_string = extract_json_string(&content);
+    let crate_entries = parse_search_index(&json_string);
+
+    // Decode all crates into search items
+    let mut all_items = Vec::new();
+    for entry in &crate_entries {
+        let items = decode_crate(&entry.name, &entry.data);
+        all_items.extend(items);
+    }
+
+    // Search for items matching the symbol (case-insensitive substring match)
+    let search_term = symbol.to_lowercase();
+    let results: Vec<_> = all_items
+        .iter()
+        .filter(|item| item.name.to_lowercase().contains(&search_term))
+        .collect();
+
+    // Display results
+    if results.is_empty() {
+        println!("{} No results found for \"{}\"", "✗".red().bold(), symbol);
+    } else {
+        println!(
+            "\n{} Found {} result{} for \"{}\":\n",
+            "✓".green().bold(),
+            results.len(),
+            if results.len() == 1 { "" } else { "s" },
+            symbol
+        );
+
+        for item in results {
+            let type_str = format!("{:?}", item.item_type);
+            println!(
+                "  {} ({}) in {}",
+                item.name.cyan(),
+                type_str.yellow(),
+                item.crate_name.dimmed()
+            );
+            if !item.path.is_empty() {
+                println!("    at {}", item.path.dimmed());
+            }
+        }
+    }
 
     Ok(())
 }

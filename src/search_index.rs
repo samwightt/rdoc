@@ -44,87 +44,87 @@ pub enum ItemType {
 
 /// A crate entry from the search index
 #[derive(Debug, Deserialize, Serialize)]
-struct CrateEntry {
+pub struct CrateEntry {
     /// Name of the crate
     #[serde(rename = "0")]
-    name: String,
+    pub name: String,
     /// Compact data for this crate
     #[serde(rename = "1")]
-    data: CrateData,
+    pub data: CrateData,
 }
 
 /// Qualified path entry - maps an item index to its module path.
 #[derive(Debug, Deserialize, Serialize)]
-struct QualifiedPath {
+pub struct QualifiedPath {
     /// Item index this path applies to
     #[serde(rename = "0")]
-    index: usize,
+    pub index: usize,
 
     /// Fully qualified module path
     #[serde(rename = "1")]
-    path: String,
+    pub path: String,
 }
 
 /// Parent item type information.
 #[derive(Debug, Deserialize, Serialize)]
-struct PathItem {
+pub struct PathItem {
     /// Item type
     #[serde(rename = "0")]
-    ty: ItemType,
+    pub ty: ItemType,
 
     /// Item name
     #[serde(rename = "1")]
-    name: String,
+    pub name: String,
 
     /// Index into the `paths` array for module path
     #[serde(rename = "2", skip_serializing_if = "Option::is_none", default)]
-    path_index: Option<usize>,
+    pub path_index: Option<usize>,
 
     /// Index into the `paths` array for exact path (re-exports)
     #[serde(rename = "3", skip_serializing_if = "Option::is_none", default)]
-    exact_path_index: Option<usize>,
+    pub exact_path_index: Option<usize>,
 
     /// Unbox flag for special handling
     #[serde(rename = "4", skip_serializing_if = "Option::is_none", default)]
-    unbox_flag: Option<u32>,
+    pub unbox_flag: Option<u32>,
 }
 
 /// Re-export entry.
 #[derive(Debug, Deserialize, Serialize)]
-struct Reexport {
+pub struct Reexport {
     /// Item index
     #[serde(rename = "0")]
-    item_index: usize,
+    pub item_index: usize,
 
     /// Index into the `paths` array for re-export location
     #[serde(rename = "1")]
-    path_index: usize,
+    pub path_index: usize,
 }
 
 /// Parameter types for a function or method.
 #[serde_as]
 #[derive(Debug, Deserialize, Serialize)]
-struct ParamTypes {
+pub struct ParamTypes {
     /// Item index
     #[serde(rename = "0")]
-    item_index: usize,
+    pub item_index: usize,
 
     /// Type parameters (parsed from comma-separated string)
     #[serde(rename = "1")]
     #[serde_as(as = "StringWithSeparator::<CommaSeparator, String>")]
-    types: Vec<String>,
+    pub types: Vec<String>,
 }
 
 /// Implementation disambiguator for trait implementations.
 #[derive(Debug, Deserialize, Serialize)]
-struct ImplDisambiguator {
+pub struct ImplDisambiguator {
     /// Item index
     #[serde(rename = "0")]
-    item_index: usize,
+    pub item_index: usize,
 
     /// URL-encoded disambiguator string
     #[serde(rename = "1")]
-    disambiguator: String,
+    pub disambiguator: String,
 }
 
 /// Compact crate data from search-index.js.
@@ -140,14 +140,14 @@ struct ImplDisambiguator {
 ///
 /// Based on the format documented in SEARCH_INDEX_FORMAT.md
 #[derive(Debug, Deserialize, Serialize)]
-struct CrateData {
+pub struct CrateData {
     /// Type string where each character encodes a type ID for the corresponding item.
     ///
     /// Each character maps to a type via: `char.to_digit(36) - 10` or similar encoding.
     /// Common types: 'K'=10 (trait), 'N'=13 (method), 'C'=2 (module), etc.
     /// Length always equals `names.length` (parallel arrays).
     #[serde(rename = "t")]
-    types: String,
+    pub types: String,
 
     /// Names array containing the name of each searchable item.
     ///
@@ -155,7 +155,7 @@ struct CrateData {
     /// Empty string "" means "reuse the last name" (compression technique).
     /// Examples: ["SliceExt", "alloc", "boxed", ...]
     #[serde(rename = "n")]
-    names: Vec<String>,
+    pub names: Vec<String>,
 
     /// Qualified paths array - sparse map of item indices to their module paths.
     ///
@@ -166,7 +166,7 @@ struct CrateData {
     /// then the item at position 142 in the `n` array belongs to the module path
     /// "either::iterator".
     #[serde(rename = "q", default)]
-    paths: Vec<QualifiedPath>,
+    pub paths: Vec<QualifiedPath>,
 
     /// Path/parent data array - type information for items that can be parents.
     ///
@@ -174,7 +174,7 @@ struct CrateData {
     /// main arrays can reference entries here via the `parent_indices` field to
     /// indicate their parent type (e.g., a method's parent struct/trait).
     #[serde(rename = "p", default)]
-    parent_items: Vec<PathItem>,
+    pub parent_items: Vec<PathItem>,
 
     /// Re-exports array - maps items to their re-export locations.
     ///
@@ -182,36 +182,36 @@ struct CrateData {
     /// an item index to a path index in the `paths` array, indicating the module path
     /// where the item is re-exported.
     #[serde(rename = "r", default)]
-    reexports: Vec<Reexport>,
+    pub reexports: Vec<Reexport>,
     /// Parent indices (VLQ hex encoded)
     #[serde(default)]
-    i: String,
+    pub i: String,
     /// Function type signatures (VLQ hex encoded)
     #[serde(default)]
-    f: String,
+    pub f: String,
     /// Description shard lengths (VLQ hex encoded)
     #[serde(default, rename = "D")]
-    desc: String,
+    pub desc: String,
 
     /// Parameter types array - maps item indices to their parameter types.
     ///
     /// Sparse array containing type parameter information for functions and methods.
     /// Each entry maps an item index to a vector of type parameters (generics, associated types, etc.).
     #[serde(default, rename = "P")]
-    param_types: Vec<ParamTypes>,
+    pub param_types: Vec<ParamTypes>,
 
     /// Implementation disambiguators - uniquely identify trait implementations.
     ///
     /// Sparse array mapping item indices to URL-encoded disambiguator strings.
     /// Used to distinguish between multiple trait implementations for the same type.
     #[serde(default, rename = "b")]
-    impl_disambiguators: Vec<ImplDisambiguator>,
+    pub impl_disambiguators: Vec<ImplDisambiguator>,
     /// Deprecated items bitmap
     #[serde(default)]
-    c: String,
+    pub c: String,
     /// Empty description bitmap
     #[serde(default)]
-    e: String,
+    pub e: String,
 
     /// Aliases - maps alternative names to item indices.
     ///
@@ -219,12 +219,12 @@ struct CrateData {
     /// This allows items to be found by multiple names during search.
     /// For example, "errno" and "__errno_location" might both map to the same item.
     #[serde(default, rename = "a")]
-    aliases: Option<HashMap<String, Vec<usize>>>,
+    pub aliases: Option<HashMap<String, Vec<usize>>>,
 }
 
 /// Extract the JSON string from search-index.js
 /// The file format is: var searchIndex = new Map(JSON.parse('[...]'));
-fn extract_json_string(content: &str) -> String {
+pub fn extract_json_string(content: &str) -> String {
     // Find the pattern JSON.parse(' and ')
     let start_pattern = "JSON.parse('";
     let end_pattern = "')";
@@ -247,7 +247,7 @@ fn extract_json_string(content: &str) -> String {
 
 /// Parse the JSON string into a vector of crate entries
 /// The format is an array of [crate_name, crate_data] pairs
-fn parse_search_index(json_string: &str) -> Vec<CrateEntry> {
+pub fn parse_search_index(json_string: &str) -> Vec<CrateEntry> {
     // Parse directly as a JSON array of CrateEntry structs
     serde_json::from_str(json_string).expect("Failed to parse JSON")
 }

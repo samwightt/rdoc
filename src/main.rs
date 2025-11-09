@@ -3,6 +3,7 @@ use color_eyre::Result;
 
 mod commands;
 mod search_index;
+mod search_items;
 
 /// A CLI tool for searching generated Rust documentation
 #[derive(Parser)]
